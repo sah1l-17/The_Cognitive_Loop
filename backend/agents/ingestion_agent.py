@@ -1,10 +1,3 @@
-"""
-Production-grade Ingestion Agent for multimodal learning content.
-
-This agent is strictly stateless and focused ONLY on perception and structuring.
-It does NOT teach, explain, simplify, or add external knowledge.
-"""
-
 import base64
 import re
 from io import BytesIO
@@ -452,10 +445,3 @@ CHUNK CONTENT:
         
         if not result.definitions:
             print("⚠️  Warning: No definitions extracted")
-        
-        # WHY: Examples and diagrams are optional, so only log if debugging
-        # Uncomment for verbose debugging:
-        # if not result.examples:
-        #     print("ℹ️  Note: No examples found in source")
-        # if not result.diagram_descriptions:
-        #     print("ℹ️  Note: No diagrams found in source")
