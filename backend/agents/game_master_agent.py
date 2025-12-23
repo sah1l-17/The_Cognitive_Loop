@@ -1,10 +1,32 @@
 """
-Game Master Agent - Gamified Active Recall Generator
+Game Master Agent - Cognitively Rigorous Active Recall Generator
+===================================================================
 
-Supported Game Types:
-1. Swipe-Sort: Binary classification (left/right categories)
-2. Find-the-Impostor: Boundary testing (3 genuine + 1 impostor)
-3. Match-Pairs: Vocabulary and relationship testing
+ARCHITECTURAL ROLE:
+    Generates ONLY active-recall practice games for concepts already understood.
+    Operates post-teaching. No explanations, hints, or evaluation logic.
+
+COGNITIVE LEARNING PRINCIPLES:
+    • Retrieval practice strengthens memory better than re-reading
+    • Desirable difficulty (not confusion) enhances learning
+    • Boundary cases reveal depth of understanding
+    • Near-miss distractors force discrimination
+    • Obvious practice creates illusion of mastery
+
+QUALITY MANDATE:
+    Every game must be challenging enough that:
+    - Learners must actively discriminate, not guess
+    - Edge cases and boundaries are tested
+    - Shallow understanding is exposed
+    - Pattern memorization fails
+
+SUPPORTED GAME TYPES:
+    1. Swipe-Sort: Binary classification with boundary-focused items
+    2. Find-the-Impostor: Subtle outlier detection (boundary testing)
+    3. Match-Pairs: Relational/functional association testing
+
+OUTPUT CONTRACT:
+    Frontend-ready JSON ONLY. No prose. No teaching. No evaluation.
 """
 
 import json
@@ -16,17 +38,26 @@ from services.gemini_client import gemini_flash
 
 class GameMasterAgent(Agent):
     """
-    Stateless game generation agent.
-    Generates procedural active-recall games based on concept + nuances.
+    High-quality active-recall game generator with cognitive rigor.
+    
+    WHY STATELESS: Each game is independent. No learner modeling here.
+    WHY JSON-ONLY: Clean separation from UI. No conversational mixing.
+    WHY NO TEACHING: Teaching happens in Tutor Agent. This is pure practice.
     """
     
-    # Architectural constants
+    # ============================================================================
+    # ARCHITECTURAL CONSTANTS
+    # ============================================================================
+    
     SUPPORTED_GAME_TYPES = ["swipe_sort", "impostor", "match_pairs"]
     
-    # Game difficulty parameters
-    SWIPE_SORT_CARD_RANGE = (8, 12)  # Min/max cards
-    IMPOSTOR_OPTIONS_COUNT = 4
-    MATCH_PAIRS_RANGE = (5, 8)  # Min/max pairs
+    # Game sizing parameters (cognitive load balanced)
+    SWIPE_SORT_CARD_RANGE = (8, 12)      # Enough items to test patterns
+    IMPOSTOR_OPTIONS_COUNT = 4           # 3 genuine + 1 impostor
+    MATCH_PAIRS_RANGE = (5, 8)           # Vocabulary/relationship depth
+    
+    # Quality thresholds
+    MIN_BOUNDARY_ITEMS_RATIO = 0.35      # At least 35% should be edge cases
     
     def __init__(self):
         super().__init__("GameMasterAgent")
@@ -38,44 +69,71 @@ class GameMasterAgent(Agent):
     
     async def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate a single active-recall game based on concept and game type.
+        Generate cognitively rigorous active-recall game.
         
         INPUT CONTRACT:
         {
-            "concept": str,           # Concept name (already understood)
-            "nuances": List[str],     # Edge cases, weak points, boundaries
+            "concept": str,           # Concept name (learner has understood this)
+            "nuances": List[str],     # Edge cases, boundaries, weak points
             "game_type": str          # One of: swipe_sort, impostor, match_pairs
         }
         
         OUTPUT CONTRACT:
-        Frontend-ready JSON matching game schema (no explanations).
+        Frontend-ready JSON matching game schema. No explanations, hints, or prose.
         
-        ARCHITECTURAL GUARANTEE:
-        - No teaching or explanations
-        - No answer evaluation
-        - No conversational text
-        - Stateless operation
+        ARCHITECTURAL GUARANTEES:
+        - No teaching or explanations (that's Tutor Agent's job)
+        - No answer evaluation (that's Evaluator Agent's job)
+        - No conversational text (pure structured data)
+        - Stateless operation (no learner modeling)
+        
+        QUALITY GUARANTEE:
+        Games test boundaries, use subtle distractors, and require active thinking.
         """
         game_type = input_data.get("game_type")
+        concept = input_data.get("concept", "")
+        nuances = input_data.get("nuances", [])
         
-        # Validate game type
+        # Validate inputs
         if game_type not in self.SUPPORTED_GAME_TYPES:
             raise ValueError(
                 f"Unsupported game_type '{game_type}'. "
                 f"Must be one of: {', '.join(self.SUPPORTED_GAME_TYPES)}"
             )
         
-        # Route to appropriate generator
+        if not concept or concept.strip() == "":
+            raise ValueError("Concept cannot be empty")
+        
+        # Route to specialized generator
         if game_type == "swipe_sort":
-            return self._generate_swipe_sort(input_data)
+            return await self._generate_swipe_sort(concept, nuances)
         elif game_type == "impostor":
-            return self._generate_impostor(input_data)
+            return await self._generate_impostor(concept, nuances)
         elif game_type == "match_pairs":
-            return self._generate_match_pairs(input_data)
+            return await self._generate_match_pairs(concept, nuances)
+    
     
     # ============================================================================
-    # JSON PARSING & VALIDATION
+    # HELPER METHODS
     # ============================================================================
+    
+    def _format_nuance_guidance(self, nuances: List[str]) -> str:
+        """
+        Format nuance list into guidance for game generation.
+        
+        WHY: Nuances represent edge cases, weak points, or boundaries that
+        should be prioritized in game generation for maximum learning value.
+        """
+        if not nuances or len(nuances) == 0:
+            return ""
+        
+        # Limit to top 4 nuances to keep prompt focused
+        selected_nuances = nuances[:4]
+        formatted = "\n\nPRIORITY BOUNDARIES TO TEST:\n"
+        for i, nuance in enumerate(selected_nuances, 1):
+            formatted += f"   {i}. {nuance}\n"
+        
+        return formatted
     
     def _clean_json_response(self, text: str) -> str:
         """
@@ -125,87 +183,233 @@ class GameMasterAgent(Agent):
                 f"Raw response: {raw_text[:200]}"
             ) from e
     
+    
     # ============================================================================
-    # SWIPE-SORT GAME GENERATOR (Binary Classification)
+    # SWIPE-SORT GAME GENERATOR (Binary Classification with Boundary Focus)
     # ============================================================================
     
-    def _generate_swipe_sort(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_swipe_sort(self, concept: str, nuances: List[str]) -> Dict[str, Any]:
         """
-        Generate binary classification game (swipe left/right).
+        Generate boundary-focused binary classification game.
         
-        PEDAGOGICAL PURPOSE: Test ability to classify items into opposing categories.
-        Tests understanding of boundaries between two contrasting groups.
+        PEDAGOGICAL PURPOSE:
+            Test ability to discriminate between opposing categories at their boundaries.
+            Shallow understanding: can classify obvious cases
+            Deep understanding: can classify edge cases and boundary items
         
-        WHY STRICT PROMPT: Prevents LLM from adding explanations or hints.
-        Forces deterministic JSON output suitable for immediate UI rendering.
+        QUALITY REQUIREMENTS:
+            • 35%+ of items must be boundary/edge cases
+            • Categories must be true opposites or mutually exclusive
+            • Avoid trivial textbook examples
+            • Items should require reasoning, not pattern matching
+        
+        WHY ASYNC: Future-proofs for retry logic or quality checks
         """
-        concept = data['concept']
-        nuances = data.get('nuances', [])
         
-        # Format nuances for inclusion in prompt if available
-        nuances_context = ""
-        if nuances:
-            nuances_context = f"\nFocus on these aspects: {', '.join(nuances[:3])}"
+        # Build nuance context for prompt
+        nuance_guidance = self._format_nuance_guidance(nuances)
         
-        prompt = f"""You are a game content generator. Output ONLY valid JSON, no explanations.
+        # ========================================================================
+        # COGNITIVELY-ENGINEERED PROMPT
+        # ========================================================================
+        # WHY THIS STRUCTURE:
+        # 1. Explicit quality criteria prevent lazy generation
+        # 2. Anti-patterns show what NOT to do
+        # 3. Examples demonstrate cognitive rigor
+        # 4. Boundary emphasis forces edge case testing
+        
+        prompt = f"""You are an expert educational game designer specializing in active-recall practice.
 
-TASK: Generate a binary classification game for the concept: "{concept}"{nuances_context}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TASK: Binary Classification Game (Swipe-Sort)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-REQUIREMENTS:
-1. Infer TWO opposing/contrasting categories from the concept
-2. Generate {self.SWIPE_SORT_CARD_RANGE[0]}-{self.SWIPE_SORT_CARD_RANGE[1]} item cards
-3. Each card must clearly belong to exactly one category
-4. Include subtle distinctions (not obvious choices)
-5. NO explanations, hints, or teaching text
-6. Output ONLY the JSON structure below
+Generate a swipe-left/swipe-right classification game for:
+
+CONCEPT: {concept}{nuance_guidance}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COGNITIVE QUALITY REQUIREMENTS (MANDATORY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. CATEGORY DESIGN:
+   • Must be true opposites or mutually exclusive groups
+   • Must emerge naturally from the concept (not forced)
+   • Must be specific to this concept (not generic)
+   
+2. ITEM SELECTION PHILOSOPHY:
+   • 35-40% of items MUST be boundary/edge cases
+   • 30-40% should be moderately clear
+   • 20-30% can be straightforward (but not trivial)
+   • AVOID obvious textbook examples
+   • PREFER items that require reasoning about WHY they belong
+   
+3. BOUNDARY FOCUS:
+   Edge cases to include:
+   • Items that share properties with both categories
+   • Items where the distinction is subtle
+   • Items that test common misconceptions
+   • Items that require applying the concept's core principle
+   
+4. COGNITIVE DIFFICULTY:
+   • Make items similar enough to require discrimination
+   • Use realistic, varied examples (not repetitive patterns)
+   • Test understanding, not trivia
+   • Avoid ambiguous wording
+   
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANTI-PATTERNS (DO NOT GENERATE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Obvious textbook examples (e.g., for "acid vs base": "Lemon juice", "Baking soda")
+❌ Pattern-based items that don't test concept understanding
+❌ Generic items that could appear in any similar game
+❌ Surface-level distinctions (test deep properties, not labels)
+❌ Repetitive phrasing across items
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE: Binary Search Tree (Correct Operations vs Incorrect Operations)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ GOOD (Boundary-focused):
+   • "Insert 5 into left subtree when parent is 7" (CORRECT - tests BST property)
+   • "Place 12 as right child of 10" (CORRECT - straightforward)
+   • "Put 8 to the left of 6" (INCORRECT - boundary: wrong direction)
+   • "Insert duplicate value as right child" (INCORRECT - edge case: duplicates)
+
+❌ BAD (Too obvious):
+   • "Insert smaller value to the left" (Too obvious - just states the rule)
+   • "Insert larger value to the right" (Too obvious)
+   
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GENERATION INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Analyze the concept to identify natural opposing categories
+2. Generate {self.SWIPE_SORT_CARD_RANGE[0]}-{self.SWIPE_SORT_CARD_RANGE[1]} items
+3. Ensure 35%+ are boundary/edge cases
+4. Vary surface form and phrasing
+5. Make learner apply concept's core principle to classify
+6. Output ONLY the JSON structure below (no prose, no markdown)
 
 OUTPUT FORMAT (STRICT):
 {{
   "game_type": "swipe_sort",
-  "left_category": "<category name>",
+  "left_category": "<specific category name>",
   "right_category": "<opposite category name>",
   "cards": ["<item1>", "<item2>", ...]
 }}
 
-CRITICAL: Return ONLY the JSON object. No markdown, no prose."""
+CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
 
         response = self.model.generate_content(prompt)
         return self._parse_and_validate_json(response.text, "swipe_sort")
     
+    
     # ============================================================================
-    # IMPOSTOR GAME GENERATOR (Boundary Testing)
+    # IMPOSTOR GAME GENERATOR (Subtle Boundary Discrimination)
     # ============================================================================
     
-    def _generate_impostor(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_impostor(self, concept: str, nuances: List[str]) -> Dict[str, Any]:
         """
-        Generate "find the impostor" game (spot the outlier).
+        Generate "find the impostor" game with subtle outlier detection.
         
-        PEDAGOGICAL PURPOSE: Test boundary understanding and edge case recognition.
-        Requires learner to identify subtle differences between related items.
+        PEDAGOGICAL PURPOSE:
+            Test boundary understanding through near-miss discrimination.
+            Shallow understanding: can identify obvious outliers
+            Deep understanding: can detect subtle boundary violations
         
-        WHY 3+1 STRUCTURE: Three genuine items establish pattern, one impostor
-        tests whether learner can detect subtle boundary violations.
+        QUALITY REQUIREMENTS:
+            • Impostor must be SUBTLE (not obviously wrong)
+            • All 4 options should appear related at first glance
+            • Learner must reason about WHY impostor doesn't fit
+            • Test conceptual boundaries, not surface features
+        
+        WHY 3+1: Three genuine items establish pattern, impostor tests if
+        learner truly understands what makes something belong.
         """
-        concept = data['concept']
-        nuances = data.get('nuances', [])
         
-        nuances_context = ""
-        if nuances:
-            # Use nuances to guide impostor selection (boundary testing)
-            nuances_context = f"\nTest these boundaries: {', '.join(nuances[:3])}"
+        nuance_guidance = self._format_nuance_guidance(nuances)
         
-        prompt = f"""You are a game content generator. Output ONLY valid JSON, no explanations.
+        prompt = f"""You are an expert educational game designer specializing in boundary testing.
 
-TASK: Generate a "find the impostor" game for the concept: "{concept}"{nuances_context}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TASK: Find-the-Impostor Game (Subtle Outlier Detection)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-REQUIREMENTS:
-1. Generate exactly {self.IMPOSTOR_OPTIONS_COUNT} options
-2. 3 options must be genuinely related to the concept
-3. 1 option is the IMPOSTOR (subtly different, not obviously wrong)
-4. The impostor should test boundary understanding
-5. Options should be similar enough to require careful thinking
-6. NO explanations, hints, or reasoning
-7. Output ONLY the JSON structure below
+Generate a "spot the impostor" game for:
+
+CONCEPT: {concept}{nuance_guidance}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COGNITIVE QUALITY REQUIREMENTS (MANDATORY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. STRUCTURE:
+   • Generate exactly {self.IMPOSTOR_OPTIONS_COUNT} options
+   • 3 options are genuinely related to the concept
+   • 1 option is the IMPOSTOR (subtle, not obvious)
+   
+2. IMPOSTOR QUALITY (CRITICAL):
+   The impostor MUST:
+   • Share surface-level similarities with genuine options
+   • Violate a core principle or boundary of the concept
+   • Require reasoning to detect (not pattern matching)
+   • Test a common misconception or edge case
+   • NOT be obviously different at first glance
+   
+3. GENUINE OPTIONS:
+   • Must clearly belong to the concept
+   • Should vary in presentation (not formulaic)
+   • Should cover different aspects of the concept
+   
+4. COGNITIVE LOAD:
+   • All 4 options should appear plausible initially
+   • Learner must think "wait, which one doesn't belong?"
+   • Detection requires applying conceptual understanding
+   
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANTI-PATTERNS (DO NOT GENERATE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Impostor that is obviously unrelated (e.g., for "sorting algorithms": "Rainbow")
+❌ Surface-level impostors (different by label only, not by principle)
+❌ Impostors that could be debated (avoid ambiguity)
+❌ All genuine options that are too similar (no variety)
+❌ Generic textbook examples
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE: Binary Search Trees (Property Violations)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ GOOD (Subtle impostor):
+   Options:
+   1. "Left child is 3, parent is 5, right child is 7" (Genuine - valid BST)
+   2. "Node 10 has left child 8 and right child 12" (Genuine - valid BST)
+   3. "Root 50, left subtree contains 30 and 40" (Genuine - valid BST)
+   4. "Parent is 6, left child is 9, right child is 4" (IMPOSTOR - violates BST property)
+   
+   WHY GOOD: Impostor looks like a BST node description but violates ordering.
+   Requires thinking about the property, not surface matching.
+
+❌ BAD (Too obvious):
+   Options:
+   1. "Node with left and right children"
+   2. "Balanced tree structure"
+   3. "In-order traversal yields sorted sequence"
+   4. "Linked list" (IMPOSTOR - obviously unrelated)
+   
+   WHY BAD: Impostor is trivially different. No boundary testing.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GENERATION INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Identify the core principle/boundary of the concept
+2. Create 3 genuine examples that clearly fit
+3. Create 1 impostor that SUBTLY violates the principle
+4. Ensure impostor shares surface similarities with genuine options
+5. Output ONLY the JSON structure below (no prose, no markdown)
 
 OUTPUT FORMAT (STRICT):
 {{
@@ -214,56 +418,251 @@ OUTPUT FORMAT (STRICT):
   "impostor": "<the impostor option from above list>"
 }}
 
-CRITICAL: Return ONLY the JSON object. No markdown, no prose."""
+CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
 
         response = self.model.generate_content(prompt)
         return self._parse_and_validate_json(response.text, "impostor")
     
+    
     # ============================================================================
-    # MATCH-PAIRS GAME GENERATOR (Association Testing)
+    # MATCH-PAIRS GAME GENERATOR (Relational Understanding)
     # ============================================================================
     
-    def _generate_match_pairs(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_match_pairs(self, concept: str, nuances: List[str]) -> Dict[str, Any]:
         """
-        Generate term-definition or concept-association matching game.
+        Generate term-association matching game testing relational understanding.
         
-        PEDAGOGICAL PURPOSE: Test vocabulary, terminology, and conceptual relationships.
-        Reinforces connections between terms and their meanings or related concepts.
+        PEDAGOGICAL PURPOSE:
+            Test vocabulary, terminology, and conceptual relationships.
+            Shallow understanding: can match obvious definitions
+            Deep understanding: can match functional/relational associations
         
-        WHY KEY-VALUE PAIRS: Simplifies frontend rendering (left column, right column).
-        Tests recall of associations without providing answers.
+        QUALITY REQUIREMENTS:
+            • Prefer functional relationships over simple definitions
+            • Test conceptual connections, not memorization
+            • Use precise, technical terminology
+            • Avoid generic dictionary definitions
+        
+        WHY KEY-VALUE PAIRS: Simplifies frontend (left column / right column)
+        while testing associative recall.
         """
-        concept = data['concept']
-        nuances = data.get('nuances', [])
         
-        nuances_context = ""
-        if nuances:
-            nuances_context = f"\nInclude these aspects: {', '.join(nuances[:4])}"
+        nuance_guidance = self._format_nuance_guidance(nuances)
         
-        prompt = f"""You are a game content generator. Output ONLY valid JSON, no explanations.
+        prompt = f"""You are an expert educational game designer specializing in relational learning.
 
-TASK: Generate a matching pairs game for the concept: "{concept}"{nuances_context}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TASK: Match-Pairs Game (Relational/Functional Association)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-REQUIREMENTS:
-1. Create {self.MATCH_PAIRS_RANGE[0]}-{self.MATCH_PAIRS_RANGE[1]} term-definition or concept-association pairs
-2. Pairs must test understanding of terminology, relationships, or vocabulary
-3. Terms should be specific to the concept (not generic)
-4. Definitions should be concise (1-2 sentences max)
-5. Include technical terms where appropriate
-6. NO explanations, hints, or teaching text
-7. Output ONLY the JSON structure below
+Generate a matching pairs game for:
+
+CONCEPT: {concept}{nuance_guidance}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COGNITIVE QUALITY REQUIREMENTS (MANDATORY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. PAIR TYPE PRIORITIES (in order):
+   🥇 FUNCTIONAL relationships (what it DOES, how it WORKS)
+   🥈 RELATIONAL associations (how concepts CONNECT)
+   🥉 PRECISE definitions (technical, not generic)
+   ❌ AVOID: Generic dictionary definitions
+   
+2. TERM SELECTION:
+   • Use technical terminology specific to this concept
+   • Avoid generic terms that could apply to anything
+   • Include terms that test nuanced understanding
+   • Vary difficulty across pairs
+   
+3. ASSOCIATION QUALITY:
+   • Associations must require concept understanding
+   • Should not be guessable without learning the concept
+   • Test relationships, not just vocabulary recall
+   • Use precise language (no vague descriptions)
+   
+4. COGNITIVE LOAD:
+   • Generate {self.MATCH_PAIRS_RANGE[0]}-{self.MATCH_PAIRS_RANGE[1]} pairs
+   • Mix difficulty levels
+   • Ensure matches are unambiguous when concept is understood
+   • Make wrong pairings obviously incorrect (for frontend scrambling)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANTI-PATTERNS (DO NOT GENERATE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Generic definitions:
+   "Algorithm" → "A step-by-step procedure" (too vague)
+   
+❌ Surface-level matching:
+   "Binary" → "Two" (trivial)
+   
+❌ Obvious vocabulary:
+   "Tree" → "A data structure with nodes" (obvious from term itself)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAMPLE: Binary Search Trees (Functional & Relational)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ GOOD (Functional/Relational):
+{{
+  "BST Property": "For any node, left subtree values < node value < right subtree values",
+  "In-order Traversal": "Visits nodes in ascending sorted order in a BST",
+  "Search Complexity": "O(log n) average case when tree is balanced",
+  "Worst Case Degradation": "Tree becomes linear when insertions are sorted, leading to O(n)",
+  "Rotation": "Operation to rebalance tree while maintaining BST property"
+}}
+
+WHY GOOD: Tests understanding of HOW things work and RELATE, not just WHAT they are.
+
+❌ BAD (Generic/Obvious):
+{{
+  "BST": "Binary Search Tree",
+  "Node": "Part of a tree",
+  "Left": "One direction",
+  "Right": "Other direction"
+}}
+
+WHY BAD: Doesn't test concept understanding. Could be guessed or memorized.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GENERATION INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Identify key technical terms from the concept
+2. Create functional/relational associations (not just definitions)
+3. Ensure associations test understanding, not memorization
+4. Use precise, specific language
+5. Output ONLY the JSON structure below (no prose, no markdown)
 
 OUTPUT FORMAT (STRICT):
 {{
   "game_type": "match_pairs",
   "pairs": {{
-    "<term1>": "<definition1 or associated concept>",
-    "<term2>": "<definition2 or associated concept>",
+    "<term1>": "<functional/relational association1>",
+    "<term2>": "<functional/relational association2>",
     ...
   }}
 }}
 
-CRITICAL: Return ONLY the JSON object. No markdown, no prose."""
+CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
 
         response = self.model.generate_content(prompt)
         return self._parse_and_validate_json(response.text, "match_pairs")
+    
+    # ============================================================================
+    # JSON PARSING & VALIDATION
+    # ============================================================================
+    
+    def _clean_json_response(self, text: str) -> str:
+        """
+        Extract clean JSON from LLM response.
+        
+        WHY: LLMs often wrap JSON in markdown code blocks or add prose.
+        This ensures we get only the raw JSON for parsing, maintaining
+        the architectural contract of structured output only.
+        """
+        # Remove markdown code fences
+        text = re.sub(r'```json\s*', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'```\s*', '', text)
+        
+        # Remove common prose patterns before/after JSON
+        # (e.g., "Here is the game:", "Let me know if...")
+        text = re.sub(r'^[^{]*', '', text)  # Remove text before first {
+        text = re.sub(r'[^}]*$', '', text)  # Remove text after last }
+        
+        return text.strip()
+    
+    def _parse_and_validate_json(self, raw_text: str, expected_game_type: str) -> Dict[str, Any]:
+        """
+        Parse LLM response into JSON and validate structure.
+        
+        WHY: Ensures architectural contract is maintained - only valid,
+        frontend-ready JSON is returned, never malformed or partial data.
+        
+        VALIDATION:
+        - Parses as valid JSON
+        - Contains expected game_type
+        - Has required fields for that game type
+        
+        RAISES:
+        ValueError if response is invalid or malformed
+        """
+        try:
+            cleaned = self._clean_json_response(raw_text)
+            parsed = json.loads(cleaned)
+            
+            # Basic schema validation
+            if not isinstance(parsed, dict):
+                raise ValueError("Response is not a JSON object")
+            
+            if parsed.get("game_type") != expected_game_type:
+                raise ValueError(
+                    f"Expected game_type '{expected_game_type}', "
+                    f"got '{parsed.get('game_type')}'"
+                )
+            
+            # Game-specific validation
+            self._validate_game_structure(parsed, expected_game_type)
+            
+            return parsed
+            
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"LLM returned invalid JSON. "
+                f"Parse error: {str(e)}. "
+                f"Raw response: {raw_text[:200]}"
+            ) from e
+    
+    def _validate_game_structure(self, game_data: Dict[str, Any], game_type: str):
+        """
+        Validate game-specific structure requirements.
+        
+        WHY: Prevents malformed games from reaching the frontend.
+        Catches LLM failures early with clear error messages.
+        """
+        if game_type == "swipe_sort":
+            required_fields = ["left_category", "right_category", "cards"]
+            for field in required_fields:
+                if field not in game_data:
+                    raise ValueError(f"Swipe-sort game missing required field: {field}")
+            
+            if not isinstance(game_data["cards"], list):
+                raise ValueError("Swipe-sort 'cards' must be a list")
+            
+            if not (self.SWIPE_SORT_CARD_RANGE[0] <= len(game_data["cards"]) <= self.SWIPE_SORT_CARD_RANGE[1]):
+                raise ValueError(
+                    f"Swipe-sort must have {self.SWIPE_SORT_CARD_RANGE[0]}-{self.SWIPE_SORT_CARD_RANGE[1]} cards, "
+                    f"got {len(game_data['cards'])}"
+                )
+        
+        elif game_type == "impostor":
+            required_fields = ["options", "impostor"]
+            for field in required_fields:
+                if field not in game_data:
+                    raise ValueError(f"Impostor game missing required field: {field}")
+            
+            if not isinstance(game_data["options"], list):
+                raise ValueError("Impostor 'options' must be a list")
+            
+            if len(game_data["options"]) != self.IMPOSTOR_OPTIONS_COUNT:
+                raise ValueError(
+                    f"Impostor game must have exactly {self.IMPOSTOR_OPTIONS_COUNT} options, "
+                    f"got {len(game_data['options'])}"
+                )
+            
+            if game_data["impostor"] not in game_data["options"]:
+                raise ValueError("Impostor must be one of the options")
+        
+        elif game_type == "match_pairs":
+            if "pairs" not in game_data:
+                raise ValueError("Match-pairs game missing 'pairs' field")
+            
+            if not isinstance(game_data["pairs"], dict):
+                raise ValueError("Match-pairs 'pairs' must be a dictionary")
+            
+            if not (self.MATCH_PAIRS_RANGE[0] <= len(game_data["pairs"]) <= self.MATCH_PAIRS_RANGE[1]):
+                raise ValueError(
+                    f"Match-pairs must have {self.MATCH_PAIRS_RANGE[0]}-{self.MATCH_PAIRS_RANGE[1]} pairs, "
+                    f"got {len(game_data['pairs'])}"
+                )
