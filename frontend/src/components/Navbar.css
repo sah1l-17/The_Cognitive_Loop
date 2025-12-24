@@ -3,25 +3,26 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 70px;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  height: 80px;
+  background: transparent;
   z-index: 1000;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
 }
 
 .navbar-container {
   max-width: 1400px;
   margin: 0 auto;
   height: 100%;
-  padding: 0 40px;
+  padding: 0 60px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  position: relative;
 }
 
 .navbar-brand {
+  position: absolute;
+  left: 60px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -34,54 +35,118 @@
 }
 
 .brand-icon {
-  font-size: 28px;
+  font-size: 32px;
 }
 
 .brand-text {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
-  color: #e0e7ff;
+  color: #ffffff;
   letter-spacing: -0.5px;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.cta-button {
+  position: absolute;
+  right: 60px;
 }
 
 .navbar-links {
   display: flex;
-  gap: 8px;
+  gap: 40px;
 }
 
 .nav-link {
   background: transparent;
   border: none;
-  color: #cbd5e1;
-  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 15px;
   font-weight: 500;
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 8px 0;
   cursor: pointer;
   transition: all 0.3s ease;
   position: relative;
 }
 
-.nav-link:hover {
-  color: #e0e7ff;
-  background: rgba(99, 102, 241, 0.1);
-}
-
-.nav-link.active {
-  color: #e0e7ff;
-  background: rgba(99, 102, 241, 0.2);
-  font-weight: 600;
-}
-
-.nav-link.active::after {
+.nav-link::after {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 20px;
-  right: 20px;
+  left: 0;
+  right: 0;
   height: 2px;
-  background: #6366f1;
-  border-radius: 2px;
+  background: #ffffff;
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: #ffffff;
+}
+
+.nav-link:hover::after,
+.nav-link.active::after {
+  transform: scaleX(1);
+}
+
+.cta-button {
+  outline: none;
+  cursor: pointer;
+  border: none;
+  padding: 0.6rem 1.5rem;
+  margin: 0;
+  font-family: inherit;
+  position: absolute;
+  right: 60px;
+  display: inline-block;
+  letter-spacing: 0.05rem;
+  font-weight: 700;
+  font-size: 14px;
+  border-radius: 500px;
+  overflow: hidden;
+  background: #000000;
+  color: black;
+  transition: all 0.3s ease;
+  color: black;
+}
+
+.cta-button span {
+  position: relative;
+  z-index: 100;
+  transition: color 0.4s;
+}
+
+.cta-button:hover span {
+  color: white;
+}
+
+.cta-button::before,
+.cta-button::after {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.cta-button::before {
+  content: "";
+  background: #ffffff;
+  width: 120%;
+  left: -10%;
+  transform: skew(30deg);
+  transition: transform 0.4s cubic-bezier(0.3, 1, 0.8, 1);
+}
+
+.cta-button:hover::before {
+  transform: translate3d(100%, 0, 0);
 }
 
 @media (max-width: 768px) {
@@ -89,12 +154,28 @@
     padding: 0 20px;
   }
 
+  .navbar-brand {
+    left: 20px;
+  }
+
+  .cta-button {
+    right: 20px;
+  }
+
+  .navbar-right {
+    gap: 20px;
+  }
+
+  .navbar-links {
+    gap: 20px;
+  }
+
   .brand-text {
     font-size: 18px;
   }
 
   .brand-icon {
-    font-size: 24px;
+    font-size: 28px;
   }
 
   .nav-link {
