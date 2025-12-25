@@ -16,7 +16,7 @@ function Navbar({ currentPage, onNavigate, theme, onToggleTheme }) {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
-          <span className="brand-text">Autonomous Tutor</span>
+          <span className="brand-text">The Cognitive loop</span>
         </motion.div>
 
         <div className="navbar-links">

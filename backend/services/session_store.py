@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 import logging
 from typing import Optional, Protocol, Tuple
 
+import certifi
+
 try:
     from motor.motor_asyncio import AsyncIOMotorClient  # type: ignore
 except Exception:  # pragma: no cover
@@ -16,6 +18,13 @@ from core.session_state import SessionState
 
 
 logger = logging.getLogger(__name__)
+
+
+def _env_truthy(name: str) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return False
+    return val.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _utc_now_iso() -> str:
@@ -75,11 +84,16 @@ class MongoSessionStore:
         if AsyncIOMotorClient is None:
             raise RuntimeError("motor is not installed; add 'motor' to requirements.txt")
 
+        tls_allow_invalid = _env_truthy("MONGODB_TLS_ALLOW_INVALID_CERTS") or _env_truthy("MONGODB_TLS_INSECURE")
+
         # Fail fast on misconfigured/blocked Mongo in dev environments.
         self._client = AsyncIOMotorClient(
             mongo_uri,
             serverSelectionTimeoutMS=int(os.getenv("MONGODB_SERVER_SELECTION_TIMEOUT_MS", "3000")),
             connectTimeoutMS=int(os.getenv("MONGODB_CONNECT_TIMEOUT_MS", "3000")),
+            tls=True,
+            tlsCAFile=certifi.where(),
+            tlsAllowInvalidCertificates=tls_allow_invalid,
         )
         self._collection = self._client[db_name][collection_name]
 
