@@ -1,0 +1,387 @@
+/* Swipe Sort Game Page Styles (match existing games + Home palette) */
+
+.swipe-sort-game {
+  min-height: 100vh;
+  padding: 2rem 0 4rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.swipe-sort-game .container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.game-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.game-title-section {
+  margin-bottom: 2rem;
+}
+
+.game-title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  line-height: 1.1;
+}
+
+.game-title .accent {
+  color: var(--accent);
+}
+
+.game-subtitle {
+  font-size: 1.25rem;
+  opacity: 0.9;
+  margin: 0;
+}
+
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 12px;
+  padding: 1.25rem;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  background: color-mix(in srgb, var(--surface) 95%, var(--accent) 5%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.streak-value {
+  color: var(--accent);
+}
+
+.message {
+  padding: 1.25rem 2rem;
+  border-radius: 12px;
+  margin: 2rem auto;
+  max-width: 700px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 1.125rem;
+  border: 2px solid transparent;
+}
+
+.message.success {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text);
+}
+
+.message.error {
+  background: color-mix(in srgb, #ef4444 10%, var(--surface));
+  border-color: color-mix(in srgb, #ef4444 40%, transparent);
+  color: var(--text);
+}
+
+.message.info {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--border) 90%, transparent);
+  color: var(--text);
+}
+
+.game-area {
+  min-height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.loading-state {
+  text-align: center;
+}
+
+.loader {
+  width: 50px;
+  height: 50px;
+  border: 4px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ready-state {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.btn-large {
+  font-size: 1.5rem;
+  padding: 1.25rem 3rem;
+}
+
+.error-state {
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+/* Layout */
+.swipe-layout {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .swipe-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bucket {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 16px;
+  padding: 1rem;
+  min-height: 520px;
+}
+
+.bucket-title {
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin-bottom: 0.75rem;
+}
+
+.bucket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 460px;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.bucket-item {
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 85%, var(--accent) 15%);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  padding: 0.75rem 0.85rem;
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.bucket-item.correct {
+  background: color-mix(in srgb, #22c55e 14%, var(--surface));
+  border-color: color-mix(in srgb, #22c55e 40%, transparent);
+}
+
+.bucket-item.wrong {
+  background: color-mix(in srgb, #ef4444 14%, var(--surface));
+  border-color: color-mix(in srgb, #ef4444 40%, transparent);
+}
+
+.swipe-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.swipe-stack {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.swipe-card {
+  width: min(520px, 100%);
+  height: 360px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 20px;
+  box-shadow: 0 18px 45px color-mix(in srgb, var(--text) 12%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  cursor: grab;
+  user-select: none;
+  overflow: hidden;
+}
+
+.swipe-card:active {
+  cursor: grabbing;
+}
+
+.swipe-card-text {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text);
+  text-align: center;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.swipe-card-hint {
+  margin-top: 0.85rem;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.empty-stack {
+  width: min(520px, 100%);
+  height: 360px;
+  border-radius: 20px;
+  border: 2px dashed color-mix(in srgb, var(--border) 90%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+}
+
+.empty-title {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.empty-subtitle {
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.swipe-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.swipe-actions .btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.review-panel {
+  width: min(520px, 100%);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.review-title {
+  font-weight: 900;
+  color: var(--text);
+  margin-bottom: 0.75rem;
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.review-item {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  padding: 0.75rem 0.85rem;
+}
+
+.review-item.correct {
+  background: color-mix(in srgb, #22c55e 10%, var(--surface));
+}
+
+.review-item.wrong {
+  background: color-mix(in srgb, #ef4444 10%, var(--surface));
+}
+
+.review-item-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.review-item-status {
+  font-weight: 900;
+  color: var(--text);
+}
+
+.review-item-meta {
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.review-pill {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--surface) 80%, var(--accent) 20%);
+  color: var(--text);
+}
+
+.review-card-text {
+  font-weight: 900;
+  color: var(--text);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.review-why {
+  margin-top: 0.45rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

@@ -61,6 +61,7 @@ function Games({ onNavigate }) {
                       className="btn btn-primary" 
                       type="button"
                       onClick={() => {
+                        if (game.id === 'swipe-sort') onNavigate('swipe-sort-game');
                         if (game.id === 'imposter') onNavigate('impostor-game');
                         if (game.id === 'pair') onNavigate('match-pairs-game');
                       }}

@@ -15,4 +15,4 @@ genai.configure(api_key=api_key)
 
 
 def gemini_flash():
-    return genai.GenerativeModel("gemini-2.5-flash-lite")
+    return genai.GenerativeModel("gemini-2.5-flash")

@@ -60,7 +60,7 @@ class GameMasterAgent(Agent):
     MIN_BOUNDARY_ITEMS_RATIO = 0.35      # At least 35% should be edge cases
     
     # Batch generation
-    GAMES_PER_BATCH = 5                  # Generate 5 games at a time
+    GAMES_PER_BATCH = 2                  # Generate 2 games at a time
     MAX_GENERATION_ATTEMPTS = 3
     
     def __init__(self):
@@ -73,7 +73,7 @@ class GameMasterAgent(Agent):
     
     async def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate 5 cognitively rigorous active-recall games in a batch.
+        Generate 2 cognitively rigorous active-recall games in a batch.
         
         INPUT CONTRACT:
         {
@@ -83,14 +83,14 @@ class GameMasterAgent(Agent):
         }
         
         OUTPUT CONTRACT:
-        Frontend-ready JSON batch containing 5 games. No explanations, hints, or prose.
+        Frontend-ready JSON batch containing 2 games. No explanations, hints, or prose.
         
         ARCHITECTURAL GUARANTEES:
         - No teaching or explanations (that's Tutor Agent's job)
         - No answer evaluation (that's Evaluator Agent's job)
         - No conversational text (pure structured data)
         - Stateless operation (no learner modeling)
-        - Always generates 5 unique games per request
+        - Always generates 2 unique games per request
         
         QUALITY GUARANTEE:
         Games test boundaries, use subtle distractors, and require active thinking.
@@ -223,7 +223,7 @@ class GameMasterAgent(Agent):
     
     async def _generate_swipe_sort_batch(self, concept: str, nuances: List[str]) -> Dict[str, Any]:
         """
-        Generate a batch of 5 swipe-sort games.
+        Generate a batch of 2 swipe-sort games.
         """
         games = []
         for i in range(self.GAMES_PER_BATCH):
@@ -370,7 +370,7 @@ CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
     
     async def _generate_impostor_batch(self, concept: str, nuances: List[str]) -> Dict[str, Any]:
         """
-        Generate a batch of 5 impostor games.
+        Generate a batch of 2 impostor games.
         """
         games = []
         for i in range(self.GAMES_PER_BATCH):
@@ -506,7 +506,7 @@ CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
     
     async def _generate_match_pairs_batch(self, concept: str, nuances: List[str]) -> Dict[str, Any]:
         """
-        Generate a batch of 5 match-pairs games.
+        Generate a batch of 2 match-pairs games.
         """
         games = []
         for i in range(self.GAMES_PER_BATCH):

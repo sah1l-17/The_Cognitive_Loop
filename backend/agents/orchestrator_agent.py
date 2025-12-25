@@ -88,7 +88,7 @@ class OrchestratorAgent:
             current_index = session.game_index[concept][game_type]
             existing_games = session.generated_games[concept][game_type]
             
-            # If we've exhausted current batch, generate 5 more
+            # If we've exhausted current batch, generate 2 more
             if current_index >= len(existing_games):
                 game_input = {
                     "concept": concept,
