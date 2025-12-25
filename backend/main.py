@@ -135,6 +135,14 @@ class GameRequest(BaseModel):
     concept: Optional[str] = None  # Override current concept
     nuances: Optional[List[str]] = []
 
+
+class GameAnswerRequest(BaseModel):
+    session_id: str
+    game_type: str  # "swipe_sort", "impostor", "match_pairs"
+    concept: Optional[str] = None
+    is_correct: Optional[bool] = None
+    selected: Optional[str] = None
+
 class ChatResponse(BaseModel):
     """Standard response for all interactions."""
     session_id: str
@@ -356,6 +364,30 @@ async def generate_game(request: GameRequest):
         result = await game_master_agent.run(game_input)
         session.last_agent = "game_master"
 
+        # Persist generated batch into the session so Mongo stores it.
+        game_type = request.game_type
+        if concept not in session.generated_games:
+            session.generated_games[concept] = {}
+            session.game_index[concept] = {}
+            session.game_stats[concept] = {}
+
+        if game_type not in session.generated_games[concept]:
+            session.generated_games[concept][game_type] = []
+            session.game_index[concept][game_type] = 0
+
+        if game_type not in session.game_stats[concept]:
+            session.game_stats[concept][game_type] = {
+                "streak": 0,
+                "best_streak": 0,
+                "correct": 0,
+                "total": 0,
+            }
+
+        # `result` is a batch payload: {game_type, concept, games: [...], total_games}
+        games = result.get("games") if isinstance(result, dict) else None
+        if isinstance(games, list) and games:
+            session.generated_games[concept][game_type].extend(games)
+
         await session_store.save(request.session_id, session)
         
         return ChatResponse(
@@ -368,6 +400,53 @@ async def generate_game(request: GameRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/game/answer")
+async def record_game_answer(request: GameAnswerRequest):
+    """Record a user's answer for a game and persist streak/score in Mongo."""
+    session = await get_session_or_404(request.session_id)
+
+    concept = request.concept or session.current_concept or "general knowledge"
+    game_type = request.game_type
+
+    if concept not in session.game_stats:
+        session.game_stats[concept] = {}
+    if game_type not in session.game_stats[concept]:
+        session.game_stats[concept][game_type] = {
+            "streak": 0,
+            "best_streak": 0,
+            "correct": 0,
+            "total": 0,
+        }
+
+    stats = session.game_stats[concept][game_type]
+
+    if request.is_correct is None:
+        raise HTTPException(status_code=400, detail="is_correct is required")
+
+    is_correct = bool(request.is_correct)
+    stats["total"] = int(stats.get("total", 0) or 0) + 1
+    stats["correct"] = int(stats.get("correct", 0) or 0) + (1 if is_correct else 0)
+
+    if is_correct:
+        stats["streak"] = int(stats.get("streak", 0) or 0) + 1
+        stats["best_streak"] = max(int(stats.get("best_streak", 0) or 0), int(stats["streak"]))
+    else:
+        stats["streak"] = 0
+
+    # Optional logging
+    session.log({
+        "type": "game_answer",
+        "game_type": game_type,
+        "concept": concept,
+        "selected": request.selected,
+        "is_correct": is_correct,
+        "ts": datetime.utcnow().isoformat(),
+    })
+
+    await session_store.save(request.session_id, session)
+    return {"session_id": request.session_id, "concept": concept, "game_type": game_type, "stats": stats}
 
 @app.get("/api/session/{session_id}")
 async def get_session(session_id: str):

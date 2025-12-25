@@ -64,7 +64,7 @@ function App() {
       
       <main className="main-content">
         {renderPage()}
-        {currentPage !== 'chat' && <Footer />}
+        {currentPage !== 'chat' && currentPage !== 'impostor-game' && <Footer />}
       </main>
     </div>
   );

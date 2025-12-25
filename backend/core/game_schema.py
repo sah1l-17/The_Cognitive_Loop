@@ -6,15 +6,19 @@ class SwipeSortGame(BaseModel):
     left_category: str
     right_category: str
     cards: List[str]
+    answer_key: Dict[str, str]
+    why: Dict[str, str]
 
 class ImpostorGame(BaseModel):
     game_type: str
     options: List[str]
     impostor: str
+    why: str
 
 class MatchPairsGame(BaseModel):
     game_type: str
     pairs: Dict[str, str]
+    why: Dict[str, str]
 
 class GameBatch(BaseModel):
     """Batch of 5 games of the same type"""

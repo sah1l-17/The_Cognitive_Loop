@@ -16,6 +16,10 @@ class SessionState:
         self.generated_games = {}  # {concept: {game_type: [game1, game2, ...]}}
         self.game_index = {}  # {concept: {game_type: current_index}}
 
+        # Game performance stats (persisted)
+        # {concept: {game_type: {streak, best_streak, correct, total}}}
+        self.game_stats = {}
+
     def log(self, entry: dict):
         self.history.append(entry)
 
@@ -41,6 +45,7 @@ class SessionState:
             "understood": bool(self.understood),
             "generated_games": safe(getattr(self, "generated_games", {})),
             "game_index": safe(getattr(self, "game_index", {})),
+            "game_stats": safe(getattr(self, "game_stats", {})),
         }
 
     @classmethod
@@ -63,4 +68,5 @@ class SessionState:
         # Game tracking state (persist across reloads)
         s.generated_games = data.get("generated_games") or {}
         s.game_index = data.get("game_index") or {}
+        s.game_stats = data.get("game_stats") or {}
         return s

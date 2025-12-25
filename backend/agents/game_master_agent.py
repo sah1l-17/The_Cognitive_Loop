@@ -61,6 +61,7 @@ class GameMasterAgent(Agent):
     
     # Batch generation
     GAMES_PER_BATCH = 5                  # Generate 5 games at a time
+    MAX_GENERATION_ATTEMPTS = 3
     
     def __init__(self):
         super().__init__("GameMasterAgent")
@@ -187,6 +188,33 @@ class GameMasterAgent(Agent):
                 f"Parse error: {str(e)}. "
                 f"Raw response: {raw_text[:200]}"
             ) from e
+
+    def _generate_valid_game(self, prompt: str, expected_game_type: str) -> Dict[str, Any]:
+        """Generate a single valid game JSON, retrying when the LLM output is malformed.
+
+        WHY: Once we require answer keys + rationales, occasional LLM formatting drift
+        becomes more costly. Retrying with explicit error feedback dramatically improves
+        reliability without complicating callers.
+        """
+
+        last_error: Exception | None = None
+        retry_prompt = prompt
+        for attempt in range(1, self.MAX_GENERATION_ATTEMPTS + 1):
+            try:
+                response = self.model.generate_content(retry_prompt)
+                return self._parse_and_validate_json(response.text, expected_game_type)
+            except Exception as e:
+                last_error = e
+                # Add tight corrective instruction while keeping the original spec.
+                retry_prompt = (
+                    prompt
+                    + "\n\nIMPORTANT: Your previous response was invalid. "
+                    + f"Error: {str(e)}. "
+                    + "Return ONLY valid JSON matching the output schema exactly. "
+                    + "Do not include markdown fences or extra text."
+                )
+
+        raise ValueError(f"Failed to generate valid '{expected_game_type}' game after {self.MAX_GENERATION_ATTEMPTS} attempts") from last_error
     
     
     # ============================================================================
@@ -319,13 +347,21 @@ OUTPUT FORMAT (STRICT):
   "game_type": "swipe_sort",
   "left_category": "<specific category name>",
   "right_category": "<opposite category name>",
-  "cards": ["<item1>", "<item2>", ...]
+    "cards": ["<item1>", "<item2>", ...],
+    "answer_key": {{
+        "<item1>": "left",
+        "<item2>": "right"
+    }},
+    "why": {{
+        "<item1>": "<one-sentence rationale grounded in the concept>",
+        "<item2>": "<one-sentence rationale grounded in the concept>"
+    }}
 }}
 
 CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
 
         response = self.model.generate_content(prompt)
-        return self._parse_and_validate_json(response.text, "swipe_sort")
+        return self._generate_valid_game(prompt, "swipe_sort")
     
     
     # ============================================================================
@@ -454,13 +490,14 @@ OUTPUT FORMAT (STRICT):
 {{
   "game_type": "impostor",
   "options": ["<option1>", "<option2>", "<option3>", "<option4>"],
-  "impostor": "<the impostor option from above list>"
+    "impostor": "<the impostor option from above list>",
+    "why": "<2-4 sentences explaining why this option is the impostor and what principle/boundary it violates>"
 }}
 
 CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
 
         response = self.model.generate_content(prompt)
-        return self._parse_and_validate_json(response.text, "impostor")
+        return self._generate_valid_game(prompt, "impostor")
     
     
     # ============================================================================
@@ -594,17 +631,22 @@ GENERATION INSTRUCTIONS
 OUTPUT FORMAT (STRICT):
 {{
   "game_type": "match_pairs",
-  "pairs": {{
-    "<term1>": "<functional/relational association1>",
-    "<term2>": "<functional/relational association2>",
-    ...
-  }}
+    "pairs": {{
+        "<term1>": "<functional/relational association1>",
+        "<term2>": "<functional/relational association2>",
+        "<term3>": "<functional/relational association3>"
+    }},
+    "why": {{
+        "<term1>": "<one-sentence rationale for why this match is correct>",
+        "<term2>": "<one-sentence rationale for why this match is correct>",
+        "<term3>": "<one-sentence rationale for why this match is correct>"
+    }}
 }}
 
 CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
 
         response = self.model.generate_content(prompt)
-        return self._parse_and_validate_json(response.text, "match_pairs")
+        return self._generate_valid_game(prompt, "match_pairs")
     
     # ============================================================================
     # JSON PARSING & VALIDATION
@@ -678,22 +720,36 @@ CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
         Catches LLM failures early with clear error messages.
         """
         if game_type == "swipe_sort":
-            required_fields = ["left_category", "right_category", "cards"]
+            required_fields = ["left_category", "right_category", "cards", "answer_key", "why"]
             for field in required_fields:
                 if field not in game_data:
                     raise ValueError(f"Swipe-sort game missing required field: {field}")
             
             if not isinstance(game_data["cards"], list):
                 raise ValueError("Swipe-sort 'cards' must be a list")
+
+            if not isinstance(game_data["answer_key"], dict):
+                raise ValueError("Swipe-sort 'answer_key' must be an object mapping card->left/right")
+
+            if not isinstance(game_data["why"], dict):
+                raise ValueError("Swipe-sort 'why' must be an object mapping card->rationale")
             
             if not (self.SWIPE_SORT_CARD_RANGE[0] <= len(game_data["cards"]) <= self.SWIPE_SORT_CARD_RANGE[1]):
                 raise ValueError(
                     f"Swipe-sort must have {self.SWIPE_SORT_CARD_RANGE[0]}-{self.SWIPE_SORT_CARD_RANGE[1]} cards, "
                     f"got {len(game_data['cards'])}"
                 )
+
+            # Ensure answer_key/why cover every card.
+            for card in game_data["cards"]:
+                side = game_data["answer_key"].get(card)
+                if side not in ("left", "right"):
+                    raise ValueError("Swipe-sort answer_key must map every card to 'left' or 'right'")
+                if not isinstance(game_data["why"].get(card), str) or not game_data["why"].get(card):
+                    raise ValueError("Swipe-sort why must include a non-empty rationale for every card")
         
         elif game_type == "impostor":
-            required_fields = ["options", "impostor"]
+            required_fields = ["options", "impostor", "why"]
             for field in required_fields:
                 if field not in game_data:
                     raise ValueError(f"Impostor game missing required field: {field}")
@@ -709,6 +765,9 @@ CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
             
             if game_data["impostor"] not in game_data["options"]:
                 raise ValueError("Impostor must be one of the options")
+
+            if not isinstance(game_data["why"], str) or not game_data["why"].strip():
+                raise ValueError("Impostor 'why' must be a non-empty string")
         
         elif game_type == "match_pairs":
             if "pairs" not in game_data:
@@ -716,9 +775,19 @@ CRITICAL: Return ONLY valid JSON. No explanations. No code blocks. No prose."""
             
             if not isinstance(game_data["pairs"], dict):
                 raise ValueError("Match-pairs 'pairs' must be a dictionary")
+
+            if "why" not in game_data:
+                raise ValueError("Match-pairs game missing 'why' field")
+
+            if not isinstance(game_data["why"], dict):
+                raise ValueError("Match-pairs 'why' must be a dictionary mapping term->rationale")
             
             if not (self.MATCH_PAIRS_RANGE[0] <= len(game_data["pairs"]) <= self.MATCH_PAIRS_RANGE[1]):
                 raise ValueError(
                     f"Match-pairs must have {self.MATCH_PAIRS_RANGE[0]}-{self.MATCH_PAIRS_RANGE[1]} pairs, "
                     f"got {len(game_data['pairs'])}"
                 )
+
+            for term in game_data["pairs"].keys():
+                if not isinstance(game_data["why"].get(term), str) or not game_data["why"].get(term):
+                    raise ValueError("Match-pairs why must include a non-empty rationale for every term")

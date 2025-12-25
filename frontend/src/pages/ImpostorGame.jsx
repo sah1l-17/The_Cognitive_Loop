@@ -18,6 +18,16 @@ function ImpostorGame() {
   const [isCorrect, setIsCorrect] = useState(null);
   const [message, setMessage] = useState('');
 
+  // After a selection, flip cards back automatically (but keep selection locked
+  // so the user can't re-score by clicking again).
+  useEffect(() => {
+    if (gameState !== 'result') return;
+    const t = window.setTimeout(() => {
+      setFlippedCards([]);
+    }, 900);
+    return () => window.clearTimeout(t);
+  }, [gameState]);
+
   // Initialize session on mount
   useEffect(() => {
     initializeSession();
@@ -95,6 +105,22 @@ function ImpostorGame() {
     // Check if it's the impostor
     const correct = option === currentGame.impostor;
     setIsCorrect(correct);
+
+    // Persist stats to backend (best effort)
+    if (sessionId) {
+      fetch(`${API_BASE}/api/game/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          game_type: 'impostor',
+          is_correct: correct,
+          selected: option,
+        }),
+      }).catch(() => {
+        // ignore network errors; UI still works locally
+      });
+    }
 
     // Update streak and score
     if (correct) {
@@ -245,7 +271,7 @@ function ImpostorGame() {
                     transition={{ delay: index * 0.1 }}
                   >
                     <div
-                      className={`flip-card-game ${flippedCards.includes(index) ? 'flipped' : ''} ${
+                      className={`flip-card-game ${selectedCard !== null ? 'disabled' : ''} ${flippedCards.includes(index) ? 'flipped' : ''} ${
                         selectedCard === option && option === currentGame.impostor ? 'impostor' : ''
                       } ${
                         selectedCard === option && option !== currentGame.impostor ? 'not-impostor' : ''
@@ -291,6 +317,17 @@ function ImpostorGame() {
                 ))}
               </div>
 
+              {gameState === 'result' && typeof currentGame.why === 'string' && currentGame.why.trim().length > 0 && (
+                <div className="why-panel" aria-live="polite">
+                  <div className="why-title">Why</div>
+                  <p className="why-text">
+                    {isCorrect === true
+                      ? currentGame.why
+                      : `Correct impostor: ${currentGame.impostor}. ${currentGame.why}`}
+                  </p>
+                </div>
+              )}
+
               {/* Action Buttons */}
               {gameState === 'result' && (
                 <motion.div
@@ -303,7 +340,7 @@ function ImpostorGame() {
                     ▶ Next Game
                   </button>
                   <button className="btn btn-secondary" onClick={() => setGameState('ready')}>
-                    🏠 Back to Menu
+                    Reset Score
                   </button>
                 </motion.div>
               )}
